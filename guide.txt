@@ -1,0 +1,169 @@
+ПРЕДИСЛОВИЕ
+
+Это гайд по установке artix линукса с openrc в качестве инит системы и niri в качестве оконного менеджера.
+В дальнейшем я буду использовать разные символы для выделения важных/не очень деталей
+
+! - Предупреждение
+$ - Важно
+* - Команды
+# - Рекоммендуется, но не обязательно
+% - Для справки
+
+Гайд
+
+1. Подготовка
+Для начала очевидно вам понадобиться исо образ, в случае если вы используете windows скачайте rufus/balena etcher.
+В любом другом случае воспользуйтесь "sudo dd" командой.
+Скачать образ можно с https://mirror3.artixlinux.org/iso/artix-base-openrc-20260813-x86_64.iso, просто вставьте ссылку в свой браузер, либо используйте утилиту "wget".
+В случае с windows откройте rufus и $выберите тип разметки gpt (ну и очевидно свою флешку в окне выбора). В любом другом случае:
+* lsblk 
+для того чтобы узнать имя своей флешки
+* sudo dd if=artix-base-openrc-* of=<имя вашей флешки> bs=4M status=progress && sync
+чтобы записать образ на флешку
+
+После этого перезагрузитесь и выберите в биосе загрузку с флешки, либо поменяйте порядок загрузки так чтобы флешка была в самом верху.
+
+$ 2. Разметка диска
+
+После загрузки введите lsblk чтобы узнать имя вашего диска
+Используйте $cfdisk /dev/<имя вашего диска> !Очевидно это сотрет с него все данные
+В cfdisk интерфейс довольно понятный, вам нужно создать раздел на 0.1-1 гигабайта, по вашему усмотрению. Раздел на 8-16 гигов. Раздел на все оставшееся место. Для первого выберите в разделе type EFI System, для второго Linux swap, для третьего Linux filesystem.
+
+$ 3. Создание файловой системы
+
+% Вам на выбор дается 5 варианта:
+f2fs если вы не такой как все, никаких значимых преимуществ не имеет.
+xfs если вам плевать, аналог ext4, но слегка более быстрый, но его нельзя уменьшить потом в gparted
+btrfs самый популярный вариант в коммьюнити изза обилия фич, жаль что все эти фичи бесполезны
+zfs вариант от freebsd для серверов, крайне медленный (до безумия, компиляция программы которая на ext4 у меня собралась за 2 минуты, на zfs собиралась 30 минут), зато стабильный, по слухам, не рекоммендую ни в коем случае
+ext4 самый нормальный вариант, именно его я и буду рассматривать в гайде
+
+lsblk для того чтобы узнать имена разделов диска, там будет чтото вроде sda1,sda2,sda3 или nvme0n1p1,nvme0n1p2,nvme0n1p3
+% nvme0n1     259:0    0 476.9G  0 disk
+├─nvme0n1p1 259:1    0   102M  0 part
+├─nvme0n1p2 259:2    0  13.5G  0 part
+└─nvme0n1p3 259:3    0 463.3G  0 part
+Я буду использовать имена своих разделов для примера, просто сравни их размер с теми которые у тебя и подставь свои названия
+
+* mkfs.ext4 /dev/nvme0n1p3
+* mkswap /dev/nvme0n1p2
+* mkfs.fat -F 32 /dev/nvme0n1p1
+
+Дальше необходимо примонтировать разделы
+
+* mount /dev/nvme0n1p3 /mnt
+* mkdir -p /mnt/boot/efi 
+* mount /dev/nvme0n1p1 /mnt/boot/efi
+* swapon /dev/nvme0n1p2
+
+$ 4. Базовая система
+Для начала потребуется интернет, я буду использовать кабель. В случае если у вас есть только беспроводной используйте команду nmtui и подключитесь к нему.
+
+* basestrap /mnt base base-devel openrc elogind-openrc linux-zen linux-zen-headers linux-firmware
+в случае если у вас nvidia как у меня, добавьте еще nvidia-open-dkms
+
+* fstabgen -U /mnt >> /mnt/etc/fstab
+Базовая таблица файловой системы, я свою немного изменил и вот как она выглядит
+
+%
+
+  # Static information about the filesystems.
+  # See fstab(5) for details.
+
+  # <file system> <dir> <type> <options> <dump> <pass>
+  # /dev/nvme0n1p3
+UUID=61cc5ce8-834d-4f6e-9bf8-a00795a48c44	/         	ext4      	rw,relatime	0 0
+
+  # /dev/nvme0n1p1
+  UUID=73F4-560A      	/boot/efi 	vfat      	rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro	0 2
+
+  # /dev/nvme0n1p2
+  UUID=e12ce096-bf74-4831-aacb-d4948cff83d0	none      	swap      	defaults  	0 0
+
+  # /dev/sda1 
+  UUID=106f1e05-242f-41e9-ace2-784002c805af /mnt xfs defaults,x-gvfs-show 0 0
+
+%
+
+$ 5. Подготовка и базовая конфигурация
+* artix-chroot /mnt
+* ln -sf /usr/share/zoneinfo/<Регион>/<Город> /etc/localtime
+pacman -S <на ваш выбор, micro или neovim, я буду использовать nvim>
+nvim /etc/locale.gen
+вам нужно раскомментировать две строки с:
+en_US.UTF-8 UTF-8  
+en_US ISO-8859-1  
+
+* locale-gen
+* pacman -S grub os-prober efibootmgr
+* grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=grub
+* grub-mkconfig -o /boot/grub/grub.cfg
+
+* passwd 
+вам пароль от root
+* useradd -m <на ваш выбор>
+* usermod -a -G wheel,video,audio,input <ваш юзер>
+* passwd <ваш юзер>
+* nvim /etc/hostname
+то как ваш компьютер будет отображаться в локальной сети
+* pacman -S networkmanager-openrc
+* rc-update add NetworkManager
+% Сейчас будет небольшое отступление по поводу openrc
+% rc-update отвечает за добавление сервисов в автозапуск, аналог systemctl enable
+% rc-service отвечает за мгновенное включение сервисов, аналог systemctl service start
+% /etc/init.d хранит системные скрипты запуска
+% /etc/user/init.d хранит пользовательские скрипты запуска
+% /etc/rc.conf конфиг openrc, мы к нему еще вернемся
+* pacman -S vi
+* visudo
+раскомментируем строки
+
+  ## Same thing without a password
+  %wheel ALL=(ALL:ALL) NOPASSWD: ALL
+
+я также буду использовать doas, поэтому
+* pacman -S doas
+* nvim /etc/doas.conf
+"permit nopass <user> as root
+permit nopass root"
+
+дальше мы выходим (ctrl+d)
+отмонтируем разделы, на всякий случай 
+* umount -R /mnt
+и перезагружаемся
+* reboot
+
+$ 6. Пост установка
+После ребута подключитесь к интернету через nmtui.
+Нам понадобиться paru (aur helper), к сожалению artix поддерживает не все aur пакеты, но с большей их частью проблем возникнуть не должно.
+* git clone https://aur.archlinux.org/paru.git
+* cd paru
+* makepkg -si
+
+Дальше чтобы система не бибикала после каждого ребута
+* sudo nvim /etc/modprobe.d/nobeep.conf
+пишем "blacklist pcspkr"
+* paru -S pipewire-openrc wireplumber-openrc alsa-utils-openrc zramen-openrc iwd-openrc ananicy-openrc earlyoom-openrc power-profiles-daemon-openrc niri alacritty noctalia-git helium-browser-bin zen-browser-bin telegram-desktop fish python-gobject xwayland-satellite
+* chsh -s /usr/bin/fish
+* doas rc-update add --user pipewire; rc-update add --user wireplumber; doas rc-update add alsasound; doas rc-update add zramen; doas rc-update add iwd; doas rc-update add ananicy; doas rc-update add earlyoom; doas rc-update add power-profiles-daemon; doas rc-update add udev boot; doas rc-update add udev-trigger boot
+* doas nvim /etc/NetworkManager/NetworkManager.conf
+"[device]
+wifi.backend=iwd"
+* doas nvim /etc/conf.d/agetty.tty1
+  agetty_options="--autologin <user> --noclear"
+* doas nvim /etc/rc.conf
+  rc_hotplug="net.wlan !net.*"
+  rc_quiet="YES"
+  rc_parallel="YES"
+* doas nvim /etc/default/grub
+  GRUB_TIMEOUT=0
+  GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet usbcore.autosuspend=-1"
+  GRUB_PRELOAD_MODULES="part_gpt"
+* nvim ~/.config/fish/config.fish
+  if test (tty) = "/dev/tty1"
+    clear
+    dbus-run-session niri --session > /dev/null 2>&1
+  end
+* nvim ~/.config/niri/config.kdl
+  spawn-sh-at-startup "noctalia"
+  spawn-sh-at-startup "xwayland-satellite"
