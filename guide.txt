@@ -145,7 +145,7 @@ $ 6. Пост установка
 пишем "blacklist pcspkr"
 * paru -S pipewire-openrc wireplumber-openrc alsa-utils-openrc zramen-openrc iwd-openrc ananicy-openrc earlyoom-openrc power-profiles-daemon-openrc niri alacritty noctalia-git helium-browser-bin zen-browser-bin telegram-desktop fish python-gobject xwayland-satellite
 * chsh -s /usr/bin/fish
-* doas rc-update add --user pipewire; rc-update add --user wireplumber; doas rc-update add alsasound; doas rc-update add zramen; doas rc-update add iwd; doas rc-update add ananicy; doas rc-update add earlyoom; doas rc-update add power-profiles-daemon; doas rc-update add udev boot; doas rc-update add udev-trigger boot
+* rc-update add --user pipewire; rc-update add --user wireplumber; doas rc-update add alsasound; doas rc-update add zramen; doas rc-update add iwd; doas rc-update add ananicy; doas rc-update add earlyoom; doas rc-update add power-profiles-daemon; doas rc-update add udev boot; doas rc-update add udev-trigger boot
 * doas nvim /etc/NetworkManager/NetworkManager.conf
 "[device]
 wifi.backend=iwd"
