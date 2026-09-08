@@ -167,3 +167,6 @@ wifi.backend=iwd"
 * nvim ~/.config/niri/config.kdl
   spawn-sh-at-startup "noctalia"
   spawn-sh-at-startup "xwayland-satellite"
+
+7. Послесловие
+Я пользуюсь artixом уже +-3 месяца, за все это время он меня ни разу не разочаровал, в сравнении с никсом, генту или войдом, это лучший вариант. Спасибо за внимание.
